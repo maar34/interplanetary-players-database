@@ -1,4 +1,3 @@
-
 // Screen and GUI dimensions
 let sw, sh; // window size
 let cellWidth, cellHeight; // gui separation
@@ -14,7 +13,7 @@ let xData, yData, zData, xDataNorm, yDataNorm, zDataNorm; // Data arrays and the
 let easyX, easyY; // Simplified X, Y values for visualization 
 
 // GUI and Visual elements
-let bodyRenderer, proxyServerUrl, playbackDataManager; // Declare the bodyRenderer variable
+let bodyRenderer, proxyServerUrl, playbackDataManager, playbackData; // Declare the bodyRenderer variable
 
 let model00, model01; 
 let body00, body01; 
@@ -112,8 +111,8 @@ function preload() {
  
   regenValue = 0.0;
 
-  model00 = loadModel('media/d6fbd28b1af1_a_spherical_exoplan.obj', true); // Load your 3D model in preload
-  body00 = loadImage('media/d6fbd28b1af1_a_spherical_exoplan_texture_kd.jpg'); // Load your texture image
+  model00 = loadModel('media/077899da693f__Design_a_3D_model_.obj', true); // Load your 3D model in preload
+  body00 = loadImage('media/077899da693f__Design_a_3D_model__texture_kd.jpg'); // Load your texture image
   model01 = loadModel('media/9508c22b65db__A_3D_scene_depicti.obj', true); // Load your 3D model in preload
   body01 = loadImage('media/9508c22b65db__A_3D_scene_depicti_texture_kd.jpg'); // Load your texture image
 
@@ -140,7 +139,11 @@ function setup() {
   
   bodyRenderer = new BodyRenderer(bodySize);
   proxyServerUrl = 'http://161.35.206.36:3000'; // Use the IP or domain of your backend server
-  playbackDataManager = new PlaybackDataManager(proxyServerUrl);
+
+  playbackDataManager = new PlaybackDataManager();
+  playerId = 232341; // Example playerId
+
+
 
   initVariables();
   xDataNorm = 1.;
@@ -189,8 +192,7 @@ function setup() {
   createDom();
   
   // Example usage
-  onSongPlay("user123", "player456", "Song Name", "Artist Name");
-  print ("displayPlaybackData"+" "+displayPlaybackData("player456"));
+
 
 
 }  
@@ -1071,6 +1073,25 @@ function releaseDOM() {
 
 
 function mousePressed() {
+
+  const songName = 'Song A'; // Get actual song name
+  const artistName = 'Artist A'; // Get actual artist name
+  const playCount = 1; // Example count
+  const playDuration = 25;
+  const system_rightascension = 123.45; // Example value
+  const system_declination = 67.89; // Example value
+  const userId = 'user1'; // Example userId
+  const playerId = 232341; 
+
+  playbackDataManager.savePlaybackData(userId, playerId, songName, artistName, playCount, playDuration, system_rightascension, system_declination);
+
+  playbackData = playbackDataManager.getPlaybackData(playerId);
+  if (playbackData.length > 0) {
+    // Initialize player with retrieved data
+    console.log('Initialize player with:', playbackData);
+  }
+
+  print (playbackData);
   knobs.forEach(knob => {
     knob.isDragging = dist(mouseX, mouseY, knob.x, knob.y) < knob.size / 2;
   });
@@ -1697,13 +1718,3 @@ function setCurrentIndexToToday() {
     return index; // This is the normalized index for today
 }
 
-function onSongPlay(userId, playerId, songName, artistName) {
-  playbackDataManager.savePlaybackData(userId, playerId, songName, artistName, 1, 120, "14h 29m 42s", "-62° 40′ 46″");
-}
-
-function displayPlaybackData(playerId) {
-  playbackDataManager.getPlaybackData(playerId).then(data => {
-    // Code to display data on your frontend
-    console.log(data);
-  });
-}

@@ -66,7 +66,7 @@ class BodyRenderer {
     // Render the main planet model
     push();
     scale(this.planetSize);
-    rotateX(90);
+    rotateX(180);
 
     // Update the rotation angle based on playStateI
     if (playStateI === 1) {
@@ -137,6 +137,7 @@ class BodyRenderer {
 
 
     rotateX(-14);
+    
     
     // First moon
     push();
