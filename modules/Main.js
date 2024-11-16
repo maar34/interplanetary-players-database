@@ -1,5 +1,3 @@
-// modules/Main.js
-
 import { Constants, FRAME_RATE, BACKGROUND_COLOR, BOX_SIZE, FONT_PATH } from './constants.js';
 import { Assets } from './Assets.js';
 import { DataManager } from './DataManager.js';
@@ -16,17 +14,21 @@ let assets, dataManager, playbackDataManager, audioManager, renderer, gui, inter
 let easycam;
 let cellWidth, cellHeight;
 
+// State for throttling GUI updates
+let lastGUIUpdate = 0;
+const GUI_UPDATE_INTERVAL = 100; // Update GUI every 100ms
+
 const state = {
     distance: 1000,
     center: [0, 0, 0],
-    rotation: [1., 0., 0., 0.],
+    rotation: [1.0, 0.0, 0.0, 0.0],
 };
 
-// Define card object
-let card = {
+// Define player object
+let player = {
     id: "",
-    wavfile: "path/to/default.wav", // Set actual paths
-    mp3file: "path/to/default.mp3", // Set actual paths
+    wavfile: "path/to/default.wav",
+    mp3file: "path/to/default.mp3",
     initTime: "",
     endTime: "",
     speed: "",
@@ -34,150 +36,165 @@ let card = {
     maxSpeed: "",
     col1: "",
     col2: "",
-    iconSet: "", 
-    engine: "defaultEngine", // Ensure this corresponds to a valid export
+    iconSet: "",
+    engine: "../export/d00_c01_v0.3.json",
     xTag: "",
     yTag: "",
-    zTag: ""
+    zTag: "",
 };
 
 // Preload function to load assets (e.g., fonts)
 function preload() {
-    font = loadFont(FONT_PATH); // Load the font
-    console.log('Font loaded:', FONT_PATH);
+    console.log('Preloading assets...');
+    try {
+        font = loadFont('fonts/Orbitron-VariableFont_wght.ttf'); // Adjust relative path if needed
+
+        window.preloadedAssets = {
+            font,
+            model00: loadModel('media/d6fbd28b1af1_a_spherical_exoplan.obj', true),
+            model01: loadModel('media/d6fbd28b1af1_a_spherical_exoplan.obj', true),
+            body00: loadImage('media/d6fbd28b1af1_a_spherical_exoplan_texture_kd.jpg'),
+            body01: loadImage('media/d6fbd28b1af1_a_spherical_exoplan_texture_kd.jpg'),
+        };
+    } catch (error) {
+        console.error('Error during preload:', error);
+    }
 }
 
-// Setup function to initialize the environment
 function setup() {
     sw = window.innerWidth;
     sh = window.innerHeight;
-    console.log('Setup called');
 
     createCanvas(sw, sh, WEBGL);
     frameRate(FRAME_RATE);
     background(BACKGROUND_COLOR);
-    textFont(font);
-    textSize(16);
+
+    if (font) {
+        textFont(font); // Set the font for WebGL text rendering
+    } else {
+        console.warn('Font not loaded, using default font.');
+    }
 
     // Initialize EasyCam
     easycam = createEasyCam();
     easycam.setState(state, 3000);
-    console.log('EasyCam initialized');
 
-    // Initialize dimensions
     initVariables();
 
-    // Initialize modules
-    assets = new Assets();
+    assets = new Assets(window.preloadedAssets);
     dataManager = new DataManager();
     playbackDataManager = new PlaybackDataManager();
-    audioManager = new AudioManager(card); // Pass 'card'
-    renderer = new Renderer(assets, audioManager, dataManager);
-    gui = new GUI(playbackDataManager); // Pass 'playbackDataManager' to GUI
-    interaction = new Interaction(gui, renderer, audioManager, playbackDataManager); // Pass all required parameters
+    audioManager = new AudioManager(player);
+    renderer = new Renderer(assets, audioManager, dataManager, easycam);
+    gui = new GUI(playbackDataManager, easycam);
+    interaction = new Interaction(gui, renderer, audioManager, playbackDataManager);
 
-    // Log to verify initialization
-    console.log('Modules initialized:', {
-        assets,
-        dataManager,
-        playbackDataManager,
-        audioManager,
-        renderer,
-        gui,
-        interaction,
-    });
-
-    // Initialize GUI layout
     gui.layoutGUI(sw, sh, cellWidth, cellHeight);
 
-    // Begin asynchronous application initialization
     initializeApp()
         .then(() => console.log('Application initialized successfully'))
         .catch((err) => console.error('Initialization failed:', err));
 }
 
-// Draw function to render the scene
 function draw() {
     background(BACKGROUND_COLOR);
 
-    // Draw a rotating box as a placeholder
-    push();
-    rotateY(frameCount * 0.01);
-    box(BOX_SIZE);
-    pop();
+    if (!font) {
+        console.warn('Font not loaded, skipping text rendering.');
+        return;
+    }
 
-    // Render GUI and other components
-    if (gui && typeof gui.draw === 'function') {
-        gui.draw();
-    } else {
-        console.warn('GUI.draw() is not a function');
+    textFont(font); // Set the font before rendering any text
+    textSize(24);   // Set the text size
+    fill(255);      // Set text color
+    text('Rendering with WebGL and Orbitron font!', -sw / 2 + 20, -sh / 2 + 40);
+
+    if (renderer && typeof renderer.renderScene === 'function') {
+        renderer.renderScene(
+            audioManager.isInitialized ? 1 : 0,
+            easycam.getPosition()[0],
+            easycam.getPosition()[1],
+            sw,
+            sh
+        );
+    }
+
+    const now = millis();
+    if (now - lastGUIUpdate > GUI_UPDATE_INTERVAL) {
+        const amplitude = audioManager.getAmplitude() || 0;
+        const playbackState = audioManager.isPlaying ? "Playing" : "Paused";
+
+        if (gui && typeof gui.updateGUIValues === 'function') {
+            gui.updateGUIValues({
+                amplitude,
+                playbackState,
+            });
+        }
+
+        lastGUIUpdate = now;
     }
 
     if (interaction && typeof interaction.update === 'function') {
         interaction.update();
-    } else {
-        console.warn('interaction.update() is not a function');
     }
-
-    // Avoid excessive console logging for performance
-    // console.log('Drawing frame');
 }
 
-// Asynchronous initialization logic
 async function initializeApp() {
     try {
         console.log('Starting initialization...');
-        
-        // Load assets
-        await assets.loadAll();
-        console.log('Assets loaded');
 
-        // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
-        const g = urlParams.get('g');
-        console.log('URL parameter g:', g);
+        const trackId = urlParams.get('trackId');
 
-        // Load data
-        if (g) {
-            await dataManager.loadData(g);
-            console.log('Data loaded with g:', g, 'card.engine:', card.engine);
-        } else {
-            console.warn('URL parameter g not found. Loading default data.');
-            await dataManager.loadData('defaultG'); // Replace 'defaultG' with an actual default value if needed
-            console.log('Data loaded with default g: defaultG, card.engine:', card.engine);
+        if (!trackId) {
+            throw new Error('Missing trackId parameter in URL.');
         }
 
-        // Ensure 'card.engine' is set
-        if (!card.engine) {
-            console.warn('card.engine not set. Setting to default.');
-            card.engine = 'defaultEngine'; // Replace with a valid default engine
+        console.log(`Fetching data for trackId: ${trackId}`);
+
+        // Fetch and cache track data
+        const dataManager = new DataManager();
+        await dataManager.fetchTrackData(trackId);
+
+        // Access the fetched/cached data
+        const trackData = Constants.getTrackData();
+
+        if (!trackData || Object.keys(trackData).length === 0) {
+            throw new Error(`No data found for trackId: ${trackId}`);
         }
 
-        // Removed AudioManager initialization from here
+        console.log('Track data fetched or cached:', trackData);
 
-        // Initialize GUI if needed
-        await gui.initialize(); // Ensure GUI has initialize()
+        const audioManager = new AudioManager();
+        await audioManager.initialize();
 
-        // Initialize Interaction if needed
-        await interaction.initialize();
-        console.log('Interaction initialized');
+        console.log('App initialized.');
     } catch (error) {
-        console.error('Error initializing app:', error);
-        throw error;
+        console.error('Error during initialization:', error);
     }
 }
 
-// Utility function to initialize dimensions and constants
+// Initialize variables
 function initVariables() {
     console.log('Initializing variables...');
-    // Example for layout-related calculations
     const cellSize = Math.min(sw, sh) / 10;
     cellWidth = cellSize;
     cellHeight = cellSize;
     console.log('Cell size calculated:', cellSize);
 }
 
+// Handle window resize events
+function windowResized() {
+    sw = window.innerWidth;
+    sh = window.innerHeight;
+    resizeCanvas(sw, sh);
+
+    renderer.handleResize(sw, sh);
+    gui.layoutGUI(sw, sh, cellWidth, cellHeight);
+}
+
 // Expose p5.js lifecycle functions to the browser
 window.preload = preload;
 window.setup = setup;
 window.draw = draw;
+window.windowResized = windowResized;
